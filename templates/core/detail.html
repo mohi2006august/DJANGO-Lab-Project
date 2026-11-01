@@ -1,0 +1,411 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}{{ analysis.repository_name }} Architecture Intelligence{% endblock %}
+
+{% block content %}
+<div class="detail-top-nav">
+  <a href="{% url 'home' %}" class="back-link">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12"></line>
+      <polyline points="12 19 5 12 12 5"></polyline>
+    </svg>
+    <span>Back to Dashboard</span>
+  </a>
+
+  <div class="detail-actions">
+    <a href="{% url 'analysis_json' analysis.pk %}" class="btn btn-secondary btn-sm" title="Export full report as structured JSON">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      <span>Export JSON</span>
+    </a>
+
+    <button type="button" class="btn btn-secondary btn-sm" id="copy-summary-btn" onclick="copyMarkdownSummary()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span id="copy-btn-text">Copy Summary</span>
+    </button>
+
+    <form method="post" action="{% url 'analysis_delete' analysis.pk %}" onsubmit="return confirm('Permanently delete this analysis?');" style="display: inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+    </form>
+  </div>
+</div>
+
+<header class="detail-header">
+  <div class="detail-title-group">
+    <div class="eyebrow">
+      <span class="pulse-dot"></span>
+      CODEBASE DECODED · STATIC AST ANALYSIS
+    </div>
+    <h1>{{ analysis.repository_name }}</h1>
+    <div class="detail-meta">
+      <span>Analyzed on {{ analysis.created_at|date:"F j, Y · H:i" }}</span>
+      <span>•</span>
+      <span style="color: var(--accent-emerald-light);">✓ Architecture Verified</span>
+      {% if analysis.is_demo %}
+        <span>•</span>
+        <span class="version-chip" style="background: rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.3); color: var(--accent-cyan-light);">DEMO REPOSITORY</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <span class="health-badge {% if analysis.health_grade == 'A+' %}hb-a-plus{% elif analysis.health_grade == 'A' %}hb-a{% elif analysis.health_grade == 'B' %}hb-b{% elif analysis.health_grade == 'C' %}hb-c{% else %}hb-d{% endif %}" style="font-size: 16px; padding: 8px 16px;">
+      Health: {{ analysis.health_grade }} ({{ analysis.health_score }}/100)
+    </span>
+  </div>
+</header>
+
+<!-- 5 Stat Cards Bar -->
+<div class="stats-bar">
+  <div class="stat-box">
+    <div class="stat-label">Python Modules</div>
+    <div class="stat-number">{{ analysis.file_count }}</div>
+    <div class="stat-sub">distinct files</div>
+  </div>
+
+  <div class="stat-box">
+    <div class="stat-label">Total Code Lines</div>
+    <div class="stat-number">{{ analysis.total_loc|default:"N/A" }}</div>
+    <div class="stat-sub">lines of code</div>
+  </div>
+
+  <div class="stat-box">
+    <div class="stat-label">Functions & Classes</div>
+    <div class="stat-number">{{ analysis.function_count }} <span style="font-size: 16px; color: var(--text-muted);">/ {{ analysis.class_count }}</span></div>
+    <div class="stat-sub">definitions parsed</div>
+  </div>
+
+  <div class="stat-box">
+    <div class="stat-label">Dependency Links</div>
+    <div class="stat-number">{{ analysis.graph_json.edges|length }}</div>
+    <div class="stat-sub">resolved import edges</div>
+  </div>
+
+  <div class="stat-box">
+    <div class="stat-label">Circular Cycles</div>
+    <div class="stat-number" style="{% if analysis.graph_json.cycles %}color: #fb7185;{% else %}color: var(--accent-emerald-light);{% endif %}">
+      {{ analysis.graph_json.cycles|length }}
+    </div>
+    <div class="stat-sub">{% if analysis.graph_json.cycles %}cycles detected{% else %}clean hierarchy{% endif %}</div>
+  </div>
+</div>
+
+<!-- Interactive Dependency Graph Panel -->
+<section class="panel graph-panel">
+  <div class="graph-toolbar">
+    <div>
+      <div class="section-kicker">01 / ARCHITECTURE VISUALIZER</div>
+      <h2 style="font-size: 17px; font-weight: 800;">Interactive Dependency Graph</h2>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div class="graph-search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="graph-search" class="graph-search-input" placeholder="Search & focus module...">
+      </div>
+
+      <div class="graph-controls">
+        <button type="button" class="ctrl-btn" id="ctrl-zoom-in" title="Zoom In">+</button>
+        <button type="button" class="ctrl-btn" id="ctrl-zoom-out" title="Zoom Out">−</button>
+        <button type="button" class="ctrl-btn" id="ctrl-reset" title="Reset View">⟲</button>
+        <button type="button" class="ctrl-btn" id="ctrl-fullscreen" title="Toggle Fullscreen">⛶</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="graph-container" id="graph-viewport">
+    <!-- Retina Physics Canvas dynamically injected here -->
+    <div class="inspector-card" id="graph-inspector">
+      <div class="inspector-header">
+        <strong id="ins-title" style="font-family: monospace; font-size: 13px; color: var(--accent-cyan-light);">module.name</strong>
+        <button type="button" class="inspector-close" id="ins-close">✕</button>
+      </div>
+      <p id="ins-path" style="font-size: 11px; color: var(--text-muted); word-break: break-all; margin-bottom: 8px;">path/to/file.py</p>
+      
+      <div class="inspector-metric-grid">
+        <div class="im-cell"><span style="color: var(--text-muted);">Lines of Code</span><strong id="ins-lines">0</strong></div>
+        <div class="im-cell"><span style="color: var(--text-muted);">Functions</span><strong id="ins-funcs">0</strong></div>
+        <div class="im-cell"><span style="color: var(--text-muted);">Classes</span><strong id="ins-classes">0</strong></div>
+        <div class="im-cell"><span style="color: var(--text-muted);">Afferent (Ca)</span><strong id="ins-indeg">0</strong></div>
+        <div class="im-cell"><span style="color: var(--text-muted);">Efferent (Ce)</span><strong id="ins-outdeg">0</strong></div>
+        <div class="im-cell"><span style="color: var(--text-muted);">Instability (I)</span><strong id="ins-instab">0.0</strong></div>
+      </div>
+
+      <button type="button" class="btn btn-primary btn-sm" id="ins-trace-btn" style="width: 100%;">
+        💥 Trace Blast Radius
+      </button>
+    </div>
+  </div>
+
+  <div class="graph-legend-bar">
+    <div class="legend-items">
+      <span class="legend-item"><span class="legend-dot ld-hub"></span> Hotspot Hub</span>
+      <span class="legend-item"><span class="legend-dot ld-model"></span> Models / Data</span>
+      <span class="legend-item"><span class="legend-dot ld-controller"></span> Controllers / APIs</span>
+      <span class="legend-item"><span class="legend-dot ld-utility"></span> Utilities / Helpers</span>
+      <span class="legend-item"><span class="legend-dot ld-impact"></span> Blast Radius Impact</span>
+    </div>
+    <span style="font-size: 11px; color: var(--text-dim);">Scroll to zoom · Drag canvas to pan · Drag nodes to reorganize</span>
+  </div>
+</section>
+
+<!-- Two Column Layout: Findings & Impact Simulator -->
+<div class="detail-columns">
+  <!-- Findings Column -->
+  <div class="panel" style="padding: 24px;">
+    <div class="section-kicker">02 / ARCHITECTURAL RADAR</div>
+    <h2 class="panel-title" style="margin-bottom: 16px;">Key Findings & Anomalies</h2>
+    
+    <div class="findings-list">
+      {% for insight in analysis.insights_json %}
+      <div class="finding-card">
+        <div class="finding-icon {% if insight.type == 'critical' %}fi-critical{% elif insight.type == 'hotspot' %}fi-hotspot{% elif insight.type == 'warning' %}fi-warning{% elif insight.type == 'success' %}fi-success{% else %}fi-info{% endif %}">
+          {% if insight.type == 'critical' %}⚡{% elif insight.type == 'hotspot' %}🔥{% elif insight.type == 'warning' %}⚠️{% elif insight.type == 'success' %}✓{% else %}ℹ{% endif %}
+        </div>
+        <div class="finding-content">
+          <h4>{{ insight.title }}</h4>
+          <p>{{ insight.detail }}</p>
+        </div>
+      </div>
+      {% empty %}
+      <p style="color: var(--text-muted); font-size: 13px;">No specific architectural anomalies detected.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Blast Radius & Impact Simulator Column -->
+  <div class="panel" style="padding: 24px;">
+    <div class="section-kicker">03 / DOWNSTREAM IMPACT SIMULATOR</div>
+    <h2 class="panel-title">What Might Break?</h2>
+    <p style="color: var(--text-secondary); font-size: 13px; margin: 4px 0 16px;">
+      Simulate modifying a module. Traces all direct and indirect downstream dependencies that rely on it.
+    </p>
+
+    <form method="post" class="impact-simulator-form">
+      {% csrf_token %}
+      <input type="text" id="target" name="target" class="field" placeholder="e.g. shop.models, models, services" value="{{ target }}" required style="flex: 1;">
+      <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+        <span>Simulate Impact</span>
+        <span>↗</span>
+      </button>
+    </form>
+
+    {% if impact %}
+      <div class="impact-result-card" style="border-color: {% if impact.found %}{{ impact.risk_color }}{% else %}#f43f5e{% endif %};">
+        <div class="risk-header">
+          <div>
+            <strong style="font-size: 14px; font-family: monospace; color: #fff;">{{ impact.module|default:target }}</strong>
+            {% if impact.path %}<p style="font-size: 11px; color: var(--text-muted);">{{ impact.path }}</p>{% endif %}
+          </div>
+          {% if impact.found %}
+            <span class="risk-tag {% if impact.risk_level == 'Critical' %}rt-critical{% elif impact.risk_level == 'High' %}rt-high{% elif impact.risk_level == 'Moderate' %}rt-moderate{% else %}rt-low{% endif %}">
+              {{ impact.risk_level }} Risk ({{ impact.blast_radius_pct }}% blast)
+            </span>
+          {% endif %}
+        </div>
+
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 8px 0;">
+          {{ impact.message }}
+        </p>
+
+        {% if impact.found %}
+          <div class="blast-meter">
+            <div class="blast-meter-fill" style="width: {{ impact.blast_radius_pct }}%; background-color: {{ impact.risk_color }};"></div>
+          </div>
+
+          {% if impact.direct_dependents %}
+            <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-top: 10px;">
+              Direct Dependents ({{ impact.direct_dependents|length }}):
+            </div>
+            <div class="dependent-chips">
+              {% for mod in impact.direct_dependents %}
+                <span class="dep-chip" style="border-color: rgba(244, 63, 94, 0.4); color: #fecdd3;">{{ mod }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if impact.transitive_dependents %}
+            <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); margin-top: 6px;">
+              Transitive / Cascading Ripple ({{ impact.transitive_dependents|length }}):
+            </div>
+            <div class="dependent-chips">
+              {% for mod in impact.transitive_dependents %}
+                <span class="dep-chip" style="opacity: 0.85;">{{ mod }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div style="margin-top: 14px; border-top: 1px solid var(--border-subtle); padding-top: 10px;">
+            <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--primary-light);">Safety Advisory:</span>
+            <ul class="guidance-list">
+              {% for tip in impact.guidance %}
+                <li>{{ tip }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Source Inventory & Symbol Explorer -->
+<section class="panel inventory-panel" style="padding: 24px;">
+  <div class="inventory-toolbar">
+    <div>
+      <div class="section-kicker">04 / CODEBASE INVENTORY</div>
+      <h2 class="panel-title">Source Files & Syntactic Symbols</h2>
+    </div>
+
+    <input type="text" id="inventory-filter" class="inv-search" placeholder="Filter files, classes, or functions...">
+  </div>
+
+  <div class="file-list-container" id="file-list">
+    {% for file in analysis.files_json %}
+    <details class="file-row" data-search="{{ file.path }} {{ file.module }} {% for c in file.classes %}{{ c.name }} {% endfor %} {% for f in file.functions %}{{ f.name }} {% endfor %}">
+      <summary>
+        <div class="file-identity">
+          <span class="file-badge">PY</span>
+          <div>
+            <div class="file-path">{{ file.path }}</div>
+            <div style="font-size: 11px; font-family: monospace; color: var(--text-muted);">{{ file.module }}</div>
+          </div>
+        </div>
+
+        <div class="file-meta-pills">
+          <span class="f-pill">{{ file.lines }} lines</span>
+          <span class="f-pill">{{ file.functions|length }} funcs</span>
+          <span class="f-pill">{{ file.classes|length }} classes</span>
+          {% if file.complexity >= 5 %}
+            <span class="f-pill" style="background: rgba(245, 158, 11, 0.15); color: #fde68a;">C: {{ file.complexity }}</span>
+          {% endif %}
+          {% if file.parse_error %}
+            <span class="f-pill" style="background: rgba(244, 63, 94, 0.15); color: #fb7185;">Syntax Error</span>
+          {% endif %}
+          <span style="color: var(--text-muted); font-size: 12px;">▼</span>
+        </div>
+      </summary>
+
+      <div class="file-inner">
+        {% if file.parse_error %}
+          <p style="color: #fb7185; font-size: 12px; margin-bottom: 12px;">❌ {{ file.parse_error }}</p>
+        {% endif %}
+
+        {% if file.docstring %}
+          <div class="file-docstring">“{{ file.docstring }}”</div>
+        {% endif %}
+
+        <div class="symbol-grid">
+          <!-- Classes -->
+          <div>
+            <strong style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent-amber-light);">
+              Classes ({{ file.classes|length }})
+            </strong>
+            <div class="symbol-card-list" style="margin-top: 8px;">
+              {% for c in file.classes %}
+                <div class="sym-item">
+                  <div>
+                    <code>class {{ c.name }}</code>
+                    {% if c.bases %}<small>({% for b in c.bases %}{{ b }}{% if not forloop.last %}, {% endif %}{% endfor %})</small>{% endif %}
+                  </div>
+                  <small>line {{ c.line }}</small>
+                </div>
+              {% empty %}
+                <span style="font-size: 11px; color: var(--text-dim);">No classes defined</span>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Functions -->
+          <div>
+            <strong style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent-cyan-light);">
+              Functions ({{ file.functions|length }})
+            </strong>
+            <div class="symbol-card-list" style="margin-top: 8px;">
+              {% for f in file.functions %}
+                <div class="sym-item">
+                  <div>
+                    {% if f.is_async %}<small style="color: #c084fc;">async </small>{% endif %}
+                    <code>{{ f.name }}({{ f.args|join:", " }})</code>
+                  </div>
+                  <small>line {{ f.line }}</small>
+                </div>
+              {% empty %}
+                <span style="font-size: 11px; color: var(--text-dim);">No functions defined</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        {% if file.imports %}
+          <div style="margin-top: 16px; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+            <strong style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px;">
+              Declared Imports ({{ file.imports|length }}):
+            </strong>
+            <div class="dependent-chips">
+              {% for imp in file.imports %}
+                <span class="dep-chip">{{ imp }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </details>
+    {% empty %}
+      <p style="color: var(--text-muted); font-size: 13px;">No files found in archive.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- Data JSON Scripts for graph.js -->
+{{ analysis.graph_json|json_script:"graph-data" }}
+{% if impact %}{{ impact|json_script:"impact-json-data" }}{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'core/graph.js' %}"></script>
+<script>
+  // Realtime search filtering for inventory
+  const filterInput = document.getElementById("inventory-filter");
+  const fileRows = document.querySelectorAll(".file-row");
+
+  if (filterInput) {
+    filterInput.addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      fileRows.forEach(row => {
+        const text = (row.getAttribute("data-search") || "").toLowerCase();
+        row.style.display = (!q || text.includes(q)) ? "block" : "none";
+      });
+    });
+  }
+
+  // Copy Markdown Summary to clipboard
+  function copyMarkdownSummary() {
+    const text = `# CodeDNA Architecture Summary: {{ analysis.repository_name }}
+- **Health Score**: {{ analysis.health_score }}/100 (Grade {{ analysis.health_grade }})
+- **Files**: {{ analysis.file_count }}
+- **Lines of Code**: {{ analysis.total_loc }}
+- **Functions / Classes**: {{ analysis.function_count }} / {{ analysis.class_count }}
+- **Internal Dependencies**: {{ analysis.graph_json.edges|length }}
+- **Circular Cycles**: {{ analysis.graph_json.cycles|length }}
+
+## Summary
+{{ analysis.summary }}
+`;
+    navigator.clipboard.writeText(text).then(() => {
+      const btnText = document.getElementById("copy-btn-text");
+      if (btnText) {
+        btnText.textContent = "Copied! ✓";
+        setTimeout(() => { btnText.textContent = "Copy Summary"; }, 2000);
+      }
+    });
+  }
+</script>
+{% endblock %}

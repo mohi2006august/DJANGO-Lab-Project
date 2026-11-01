@@ -1,0 +1,183 @@
+{% extends "core/base.html" %}
+{% block title %}Architecture Intelligence & Dependency Visualizer{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="eyebrow">
+    <span class="pulse-dot"></span>
+    DEEP CODE INTELLIGENCE · STATIC AST ANALYSIS
+  </div>
+  <h1>See the <span class="gradient-text">DNA</span><br>inside your codebase.</h1>
+  <p class="hero-subtitle">
+    Deconstruct complex Python repositories into interactive dependency webs.
+    Detect coupling hotspots, unearth circular imports, and simulate downstream blast radius before refactoring.
+  </p>
+  <div class="hero-features">
+    <span class="feature-pill">⚡ Static AST Decomposition</span>
+    <span class="feature-pill">🕸️ Force-Directed Architecture Map</span>
+    <span class="feature-pill">💥 Downstream Blast Radius Radar</span>
+    <span class="feature-pill">🔄 Circular Dependency Detector</span>
+  </div>
+</section>
+
+<div class="home-grid">
+  <!-- Upload Box -->
+  <div class="panel upload-panel">
+    <div class="section-kicker">01 / ANALYZE CODEBASE</div>
+    <h2 class="panel-title">Upload Repository ZIP</h2>
+    <p style="color: var(--text-muted); font-size: 13px; margin: 6px 0 16px;">
+      Drop a Python repository ZIP archive. CodeDNA inspects code syntax trees without running any scripts.
+    </p>
+
+    <form method="post" enctype="multipart/form-data" class="upload-form" id="upload-form">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label" for="{{ form.repository_name.id_for_label }}">Project Name</label>
+        {{ form.repository_name }}
+        {% for error in form.repository_name.errors %}
+          <p style="color: #fb7185; font-size: 12px;">{{ error }}</p>
+        {% endfor %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Repository Archive (.ZIP, max 15MB)</label>
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">↑</div>
+          <p class="dropzone-text" id="dropzone-title">Click to browse or drag & drop ZIP file</p>
+          <p class="dropzone-sub">Accepts all standard Python project ZIPs</p>
+          {{ form.repository_zip }}
+          <div class="file-selected-badge" id="file-badge">
+            <span id="file-name-text">filename.zip</span>
+          </div>
+        </div>
+        {% for error in form.repository_zip.errors %}
+          <p style="color: #fb7185; font-size: 12px; margin-top: 4px;">{{ error }}</p>
+        {% endfor %}
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submit-btn" style="width: 100%; margin-top: 8px;">
+        <span>Analyze Codebase Architecture</span>
+        <span>↗</span>
+      </button>
+
+      <p style="text-align: center; color: var(--text-dim); font-size: 11px; margin-top: 6px;">
+        🔒 Safe & Sandboxed: files are never executed. AST parsing only.
+      </p>
+    </form>
+  </div>
+
+  <!-- Instant Demo & Workflow Stack -->
+  <div class="side-stack">
+    <div class="panel demo-card">
+      <div class="section-kicker" style="color: var(--primary-light);">INSTANT PREVIEW</div>
+      <h3 style="font-size: 18px; font-weight: 800; color: #fff;">Explore Demo E-Commerce System</h3>
+      <p style="color: var(--text-secondary); font-size: 13px; margin: 4px 0 12px;">
+        No files to upload right now? Explore an interactive multi-tier store architecture pre-loaded with models, services, controllers, and APIs.
+      </p>
+
+      <div class="demo-preview-visual">
+        <div class="node-mock nm-hub">shop.models</div>
+        <div class="node-mock nm-1">shop.services</div>
+        <div class="node-mock nm-2">shop.views</div>
+        <div class="node-mock nm-3">shop.api</div>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <a href="{% url 'load_demo' %}" class="btn btn-primary btn-sm" style="flex: 1;">
+          ⚡ Launch Live Demo
+        </a>
+        <a href="{% url 'download_sample' %}" class="btn btn-secondary btn-sm" title="Download the sample python repository to examine">
+          💾 Download ZIP
+        </a>
+      </div>
+    </div>
+
+    <div class="pipeline-step-grid">
+      <div class="pipeline-step">
+        <strong>01</strong>
+        <span>AST Parse</span>
+      </div>
+      <div class="pipeline-step">
+        <strong>02</strong>
+        <span>Resolve Graph</span>
+      </div>
+      <div class="pipeline-step">
+        <strong>03</strong>
+        <span>Trace Impact</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if recent %}
+<section class="recent-section">
+  <div class="section-head">
+    <div>
+      <div class="section-kicker">HISTORY</div>
+      <h2 style="font-size: 22px; font-weight: 800;">Recent Codebase Analyses</h2>
+    </div>
+    <span style="font-size: 12px; color: var(--text-muted);">{{ recent|length }} repositories analyzed</span>
+  </div>
+
+  <div class="recent-grid">
+    {% for item in recent %}
+    <a href="{% url 'analysis_detail' item.pk %}" class="recent-card">
+      <div class="recent-card-top">
+        <div class="recent-repo-name">{{ item.repository_name }}</div>
+        <span class="health-badge {% if item.health_grade == 'A+' %}hb-a-plus{% elif item.health_grade == 'A' %}hb-a{% elif item.health_grade == 'B' %}hb-b{% elif item.health_grade == 'C' %}hb-c{% else %}hb-d{% endif %}">
+          {{ item.health_grade }} · {{ item.health_score }}
+        </span>
+      </div>
+
+      <div class="recent-card-stats">
+        <span><strong>{{ item.file_count }}</strong> files</span>
+        <span><strong>{{ item.function_count }}</strong> funcs</span>
+        <span><strong>{{ item.graph_json.edges|length }}</strong> edges</span>
+      </div>
+
+      <div class="recent-card-footer">
+        <span>{{ item.created_at|date:"M j, Y · H:i" }}</span>
+        <span style="color: var(--accent-cyan); font-weight: 700;">Open Architecture Map →</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Drag and Drop interaction for file upload
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("zip-upload-input");
+  const fileBadge = document.getElementById("file-badge");
+  const fileNameText = document.getElementById("file-name-text");
+  const dropzoneTitle = document.getElementById("dropzone-title");
+
+  if (dropzone && fileInput) {
+    ['dragenter', 'dragover'].forEach(name => {
+      dropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+      dropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+      });
+    });
+
+    fileInput.addEventListener("change", (e) => {
+      if (fileInput.files && fileInput.files[0]) {
+        const file = fileInput.files[0];
+        fileNameText.textContent = file.name + " (" + (file.size / 1024).toFixed(1) + " KB)";
+        fileBadge.style.display = "inline-flex";
+        dropzoneTitle.textContent = "File selected ready for analysis:";
+      }
+    });
+  }
+</script>
+{% endblock %}

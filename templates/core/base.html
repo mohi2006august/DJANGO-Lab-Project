@@ -1,0 +1,61 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Codebase Intelligence{% endblock %} · CodeDNA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'core/style.css' %}">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-container">
+      <a class="brand" href="{% url 'home' %}">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        </div>
+        <span class="brand-title">CodeDNA</span>
+        <span class="version-chip">v1.2 PRO</span>
+      </a>
+
+      <div class="nav-actions">
+        <div class="status-badge">
+          <span class="pulse-dot"></span>
+          <span>AST ENGINE ACTIVE</span>
+        </div>
+        <a class="nav-btn" href="{% url 'load_demo' %}">⚡ Demo Repo</a>
+        <a class="nav-btn" href="{% url 'download_sample' %}" title="Download sample repository ZIP">💾 Sample ZIP</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap main">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %}">
+          <span>{{ message }}</span>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-content">
+      <p><strong>CodeDNA Architectural Intelligence Platform</strong> · Pure Static AST Decomposition</p>
+      <p style="color: #64748b; font-size: 11px;">
+        Zero execution guarantee: uploaded source code is parsed exclusively as abstract syntax trees and never executed.
+      </p>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
